@@ -1,7 +1,7 @@
 # Active Report
 SQL Server Active Report 3.0
 
-Consul application tool wirthen in c#.
+Console application tool wirthen in c#.
 This tool help to get SQL Server metadata info into single XML file per server.
 
 ## Problams and Solutions
