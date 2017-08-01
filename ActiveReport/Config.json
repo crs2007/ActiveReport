@@ -1,0 +1,8 @@
+﻿[  
+   {
+    "XMLOutputPath": "C:\\Output\\",
+    "ClientID": "990",
+    "ClientName":"Client Name",
+    "MaxSQLQueryTimeout":"3000"
+   }
+]

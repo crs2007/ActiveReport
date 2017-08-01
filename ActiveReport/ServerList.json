@@ -1,0 +1,9 @@
+﻿   {
+    "defaultConnectionString": "Data Source=$ServerName$;Initial Catalog=master;Integrated Security=SSPI;Application Name=NAYATechActiveReport;",
+    "Servers": [
+	  {
+        "connectionString": "Data Source=.;Initial Catalog=master;Integrated Security=SSPI;"
+      }
+    ]
+
+   }
