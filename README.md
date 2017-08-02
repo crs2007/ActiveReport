@@ -23,7 +23,7 @@ SET LOCK_TIMEOUT 2000;
 SET DEADLOCK_PRIORITY LOW;
 ```
 
-### Performance
+### Performance:
 * By default the etch SQL script run simultaneously on etch server(Multi Thread).
 * By default the process run simultaneously(Multi Thread) on all server that in the list.
 
@@ -33,7 +33,11 @@ SET DEADLOCK_PRIORITY LOW;
 * d, "debug"- Prints all messages to standard output. DefaultValue = false.
 * t, "taskScheduler"- Set task scheduler to work once a week. DefaultValue = false.
 
-
+### Example/Instructions:
+To get information on screen when the application is running-
+```
+ActiveReport.exe -d "true" -m "true"
+```
 
 ### To Do:
 * Add option to add application to Windows scheduled task.
@@ -42,3 +46,15 @@ SET DEADLOCK_PRIORITY LOW;
 * Add section that can use ftp for transfer the file to the server.
 * Add Event Viewer for XML.
 * Remove from sub root in xml Urgent_Backup => xmlns="""
+
+### License:
+ActiveReport is licensed under the MIT(https://github.com/crs2007/ActiveReport/blob/master/LICENSE) license.
+
+### Warranty:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
