@@ -48,7 +48,7 @@ ActiveReport.exe -d "true" -m "true"
 * Remove from sub root in xml Urgent_Backup => xmlns="""
 
 ### License:
-ActiveReport is licensed under the MIT(https://github.com/crs2007/ActiveReport/blob/master/LICENSE) license.
+ActiveReport is licensed under the [MIT license](https://github.com/crs2007/ActiveReport/blob/master/LICENSE).
 
 ### Warranty:
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
