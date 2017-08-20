@@ -13,7 +13,24 @@ namespace ActiveReport.Class
         public string Value { get; set; }
     }
 
-    public class SQLNodeOut
+    public class VolumeInfo
+    {
+        public string Drive { get; set; }
+        public string Total_Size { get; set; }
+        public string Free_Space { get; set; }
+        public string Label { get; set; }
+		
+	}
+
+	public class EventViewer
+	{
+		public string LogType { get; set; }
+		public int EventCount { get; set; }
+		public string EventMsg { get; set; }
+
+	}
+
+	public class SQLNodeOut
     {
         public string NodeName { get; set; }
     }

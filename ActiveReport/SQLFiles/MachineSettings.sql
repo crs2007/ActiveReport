@@ -20,7 +20,8 @@ IF OBJECT_ID('sys.dm_os_host_info') IS NOT NULL
 BEGIN
 	SELECT	@IsLinux = 1,
 			@OperatingSystem = host_distribution + ' ' + host_release
-	FROM	sys.dm_os_host_info;
+	FROM	sys.dm_os_host_info
+	WHERE host_platform = 'Linux';
 	IF OBJECT_ID('sys.dm_linux_proc_cpuinfo') IS NOT NULL
 	SELECT @ProcessorNameString = model_name FROM sys.dm_linux_proc_cpuinfo;
 	--SELECT * FROM sys.dm_li

@@ -6,12 +6,12 @@
 -- =============================================
 DECLARE @SQL VARCHAR(5000);  
 
-IF OBJECT_ID('tempdb..#Results') IS NOT NULL
-	DROP TABLE #Results;
-CREATE TABLE #Results ([Database Name] varchar(200) NULL, [File Name] varchar(1000) NULL,[Available Space in Mb] INT NULL,FG_Name sysname NULL,FG_Type sysname NULL,FG_Default int NULL);
+IF OBJECT_ID('tempdb..##DBFResults') IS NOT NULL
+	DROP TABLE ##DBFResults;
+CREATE TABLE ##DBFResults ([Database Name] varchar(200) NULL, [File Name] varchar(1000) NULL,[Available Space in Mb] INT NULL,FG_Name sysname NULL,FG_Type sysname NULL,FG_Default int NULL);
 
 SELECT @SQL =    
-'INSERT INTO #Results([Database Name], [File Name],[Available Space in Mb],FG_Name, FG_Type, FG_Default )    
+'USE [?] INSERT INTO ##DBFResults([Database Name], [File Name],[Available Space in Mb],FG_Name, FG_Type, FG_Default )    
 SELECT	''?'',   
 		fil.[name] AS [File Name],
 		CASE ceiling(fil.[size]/128)   
@@ -19,8 +19,8 @@ SELECT	''?'',
 		ELSE (([size]/128) - CAST(FILEPROPERTY(fil.[name], ''SpaceUsed''' + ') as int) /128)   
 		END AS [Available Space in Mb],
 		fg.name,fg.type_desc,fg.is_default
-FROM	[?].sys.database_files fil
-		LEFT JOIN [?].sys.data_spaces fg ON fil.data_space_id = fg.data_space_id
+FROM	sys.database_files fil
+		LEFT JOIN sys.data_spaces fg ON fil.data_space_id = fg.data_space_id
 OPTION(RECOMPILE);'   
 
 --Run the command against each database (IGNORE OFF-LINE DB)
@@ -41,5 +41,7 @@ SELECT	D.name [Database_Name],mf.name [File_Name],MF.physical_name [Physical_Nam
 		R.FG_Name,R.FG_Type,R.FG_Default
 FROM	sys.databases D
 		INNER JOIN sys.master_files MF ON MF.database_id = D.database_id
-		LEFT JOIN #Results R ON D.name = R.[Database Name] AND R.[File Name] = MF.name
+		LEFT JOIN ##DBFResults R ON D.name = R.[Database Name] AND R.[File Name] = MF.name
 OPTION(RECOMPILE);
+
+DROP TABLE ##DBFResults;

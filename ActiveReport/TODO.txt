@@ -1,0 +1,2 @@
+﻿* Add section that can handle New/Updated SQL files from GitHub. - Only updated for now
+* Suport Linux OS

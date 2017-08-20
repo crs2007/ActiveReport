@@ -1,10 +1,10 @@
 # Active Report
 SQL Server Active Report 3.0
 
-Console application tool wirthen in c#.
+Console application tool writhen in c#.
 This tool help to get SQL Server metadata info into single XML file per server.
 
-## Problams and Solutions
+## Problems and Solutions
 
 ### SQL Files:
 * Etch user can add T-SQL script as match as he like to the SQL Script Path.
@@ -13,7 +13,7 @@ This tool help to get SQL Server metadata info into single XML file per server.
 * If the script output have Multiple Active Result Sets([MARS](https://docs.microsoft.com/en-us/sql/relational-databases/native-client/features/using-multiple-active-result-sets-mars)). The last result set will be taken to the XML.
 * If one or more columns from the result sets have no name(title) It will generate one for you.
 * You can rest assure that you do not need to activate [xp_cmdshell](https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/xp-cmdshell-transact-sql) (Windows OS only) per single script.
-* If you intened to write your own script please look at the scipt structure in the folder and try that they will look alike.
+* If you intend to write your own script please look at the script structure in the folder and try that they will look alike.
 * On etch script the application adds a prefix - 
 ```sql
 SET NOCOUNT ON;
@@ -31,7 +31,9 @@ SET DEADLOCK_PRIORITY LOW;
 ### Parameters
 * m, "multithreading"- Activate multithreading when running queries. DefaultValue = true.
 * d, "debug"- Prints all messages to standard output. DefaultValue = false.
-* t, "taskScheduler"- Set task scheduler to work once a week. DefaultValue = false.
+* t, "taskScheduler"- Set task scheduler to work once a week. DefaultValue = false.(Hav to run in Administrator mode)
+* f, "ftp"- Use ftp to upload the files. DefaultValue = true.
+* g, "GitHub"- Update all sql files from GitHub repositorie. DefaultValue = true.
 
 ### Example/Instructions:
 To get information on screen when the application is running-
@@ -40,12 +42,8 @@ ActiveReport.exe -d "true" -m "true"
 ```
 
 ### To Do:
-* Add option to add application to Windows scheduled task.
-* Add section that can handle zip files. - Done
-* Add section that can handle New/Updated SQL files from GitHub.
-* Add section that can use ftp for transfer the file to the server.
-* Add Event Viewer for XML.
-* Remove from sub root in xml Urgent_Backup => xmlns="""
+* Add full support for Linux OS.
+* Add section that can handle New SQL files from GitHub.
 
 ### License:
 ActiveReport is licensed under the [MIT license](https://github.com/crs2007/ActiveReport/blob/master/LICENSE).

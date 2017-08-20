@@ -20,7 +20,8 @@ SET @IsLinux = 0;
 IF OBJECT_ID('sys.dm_os_host_info') IS NOT NULL
 BEGIN
 	SELECT	@IsLinux = 1
-	FROM	sys.dm_os_host_info  
+	FROM	sys.dm_os_host_info
+	WHERE host_platform = 'Linux'
 END
 IF @IsLinux = 0
 BEGIN

@@ -16,196 +16,236 @@ using System.Data;
 using System.Threading;
 using CommandLine;
 using CommandLine.Text;
+using System.Xml;
 
 namespace ActiveReport
 {
-    public class Program
+	public class Program
 	{
 		#region Parameters
 		public static List<AppError> AppErrors = new List<AppError>();
-        public static List<DebugError> DebugErrors = new List<DebugError>();
-        public static string SQLPrefix = ConfigurationHandler.GetSQLPrefix();
-        private static Boolean _debug = false;
-        private static Boolean _useThread = true;
-        public static string fileErrorPathBin;
-        public static string fileErrorPathOut;
+		public static List<DebugError> DebugErrors = new List<DebugError>();
+		public static string SQLPrefix = ConfigurationHandler.GetSQLPrefix();
+		private static Boolean _debug = false;
+		private static Boolean _useThread = true;
+		private static Boolean _useFTP = true;
+		public static string fileErrorPathBin;
+		public static string fileErrorPathOut;
 		public static readonly int _durationLimit = 3;
-        public static List<string> OutputFiles = new List<string>();
-        public static readonly string appErrorFile = "AppError.txt";
-        public static string outputPath = @"C:\Output\";
+		public static List<string> OutputFiles = new List<string>();
+		public static readonly string appErrorFile = "AppError.txt";
+		public static string outputPath = @"C:\Output\";
+		public static string FTPUserName;
+		public static string FTPPassword;
 		#endregion
 		static void Main(string[] args)
-        {
-            #region Parameters
+		{
+			#region Parameters
 			string errorDetail = String.Empty;
-            string destPath = outputPath;
+			string destPath = outputPath;
 			var options = new Options();
-            string toDo = @"To Do List:
-* Add option to add application to Windows scheduled task.
-* Add section that can handle zip files. - Done
-* Add section that can handle New/Updated SQL files from GitHub.
-* Add section that can use ftp for transfer the file to the server.
-* Add Event Viewer for XML.
-* Remove from sub root in xml Urgent_Backup => xmlns=""";
-			#endregion
+			string toDo = @"To Do List:
+";
+			toDo += ConfigurationHandler.readFile(@"ToDo.txt");
+			try
+			{
+				outputPath = ConfigurationHandler.GetConfigValue("XMLOutputPath");
+			}
+			catch (Exception)
+			{
 
+				outputPath = @"C:\Output\";
+			}
+
+			fileErrorPathOut = outputPath + appErrorFile;
+			#endregion
 
 			#region Clean folder from AppError.txt
 			destPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"AppError.txt");
-            fileErrorPathBin = destPath;
+			fileErrorPathBin = destPath;
 			try
 			{
-                ConfigurationHandler.DeleteFile(fileErrorPathBin);
+				ConfigurationHandler.DeleteFile(fileErrorPathBin);
 			}
 			catch (Exception ex)
 			{
-                AppErrors.Add(new AppError() { Error = new Exception(String.Concat("Error when delete AppError.txt file from - ", fileErrorPathBin), ex), ServerName = String.Empty , PrintOnScreen = true });
+				AppErrors.Add(new AppError() { Error = new Exception(String.Concat("Error when delete AppError.txt file from - ", fileErrorPathBin), ex), ServerName = String.Empty, PrintOnScreen = true });
 				goto EndOfApp;
 			}
 			#endregion
 
+			#region Get FTP user and passwords
+			RijndaelCrypt EncriptC = new RijndaelCrypt("xxx");
+			FTPUserName = EncriptC.Decrypt(ConfigurationHandler.GetConfigValue("FTPUserName"));
+			FTPPassword = EncriptC.Decrypt(ConfigurationHandler.GetConfigValue("FTPPassword"));
+			#endregion
+
+			#region Parse Arguments
 			if (CommandLine.Parser.Default.ParseArguments(args, options))
 			{
 				if (options.debug) _debug = true;
-				if (!options.multithreading) _useThread = false;
-				if (options.taskScheduler)
+				if (options.github)
 				{
 					try
 					{
-						ConfigurationHandler.setTaskService();
+						ConfigurationHandler.downloadFileFromGitHub();
 					}
 					catch (Exception ex)
 					{
-
-                        AppErrors.Add(new AppError() { Error = new Exception("Error when tring create Task Schedule.", ex), ServerName = String.Empty, PrintOnScreen = true });
+						//if (ex.n)
+						AppErrors.Add(new AppError() { Error = new Exception("Error when updating SQL file form the GitHub repositorie.", ex), ServerName = String.Empty, PrintOnScreen = false });
 					}
-					
+				}
+				if (!options.ftp) _useFTP = false;
+				if (options.multithreading) _useThread = false;
+				if (options.taskScheduler)
+				{
+					_debug = true;
+					try
+					{
+						ConfigurationHandler.setTaskService();
+						Console.ForegroundColor = ConsoleColor.Green;
+						printToScreen(String.Empty, "Task Scheduler has been created successfully!");
+						Console.ForegroundColor = ConsoleColor.White;
+					}
+					catch (Exception ex)
+					{
+						if (ex.Message.Contains("Access is denied"))
+						{
+							printToScreen(String.Empty, String.Empty, "Please, open the app in Administrator mode and try again.");
+							AppErrors.Add(new AppError() { Error = new Exception("Error when tring create Task Schedule. Please, open the app in Administrator mode and try again.", ex), ServerName = String.Empty, PrintOnScreen = false });
+						}
+						else
+						{
+							AppErrors.Add(new AppError() { Error = new Exception("Error when tring create Task Schedule.", ex), ServerName = String.Empty, PrintOnScreen = true });
+						}
+					}
+
 
 					// Don't let the program perform any other functions that aren't needed
 					goto EndOfApp;
 				}
 			}
-            try
-            {
-                outputPath = ConfigurationHandler.GetConfigValue("XMLOutputPath");
-            }
-            catch (Exception)
-            {
-                
-                outputPath = @"C:\Output\";
-            }
-            fileErrorPathOut = outputPath + appErrorFile;
-            writePublicFile(String.Concat("******              Runing Active Report 3.0 at ", DateTime.Now.ToString(), "              ******"));
+			#endregion
+			
+			writePublicFile(String.Concat("******              Runing ", ConfigurationHandler.GetAppTitle(), " at ", DateTime.Now.ToString(), "              ******"));
+
 			#region Debug
 			if (_debug)
-            {
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Out.NewLine = String.Empty;
+			{
+				Console.ForegroundColor = ConsoleColor.White;
+				Console.Out.NewLine = String.Empty;
 
-                Assembly execAssembly = Assembly.GetCallingAssembly();
+				Assembly execAssembly = Assembly.GetCallingAssembly();
 
-                AssemblyName name = execAssembly.GetName();
-                var versionInfo = FileVersionInfo.GetVersionInfo(Assembly.GetEntryAssembly().Location);
-                string AboutText;
-                AboutText = String.Concat(string.Format("{0}{1} for SQL Server health check\nMade by {2}\nCopyrights: {3}\n",
-                    Environment.NewLine,
-                    ConfigurationHandler.GetAppTitle(),
-                    versionInfo.CompanyName,
-                    versionInfo.LegalCopyright
-                    ),string.Format("Parallelism:: {0}",
-                    (_useThread) ? "Multi-Thread" : "Single-Thread"
-                    ), "\nOutput files can be found - ", outputPath, "\n",toDo,"\n\n");
-                Console.WriteLine(AboutText);
-                writePublicToAppendFile(AboutText);
+				AssemblyName name = execAssembly.GetName();
+				var versionInfo = FileVersionInfo.GetVersionInfo(Assembly.GetEntryAssembly().Location);
+				string AboutText;
+				AboutText = String.Concat(string.Format("{0}{1} for SQL Server health check\nMade by {2}\nCopyrights: {3}\n",
+					Environment.NewLine,
+					ConfigurationHandler.GetAppTitle(),
+					versionInfo.CompanyName,
+					versionInfo.LegalCopyright
+					), string.Format("Parallelism:: {0}",
+					(_useThread) ? "Multi-Thread" : "Single-Thread"
+					), "\nOutput files can be found - ", outputPath, "\n", toDo, "\n\n");
+				Console.WriteLine(AboutText);
+				writePublicToAppendFile(AboutText);
 
-            }
-			#endregion
-
-
-            try
-            {
-                ConfigurationHandler.downloadFileFromGitHub();
-            }
-            catch (Exception ex)
-            {
-                
-                AppErrors.Add(new AppError() { Error = new Exception("Error when updating SQL file form the web.", ex), ServerName = String.Empty, PrintOnScreen = false });
 			}
+			#endregion
+			string tempForErrorServerName = String.Empty;
 			try
 			{
-
-				
 				ConfigurationHandler.createDir(outputPath);
-                
-                List<string> connectionStrings = ConfigurationHandler.getConectionString();
-
+				ConfigurationHandler.ClearFolder(outputPath);
+				List<string> connectionStrings = ConfigurationHandler.getConectionString();
 				List<SQLScript> queries = ConfigurationHandler.getSQLFileContent();
-
 				List<Task> list = new List<Task>();
 
 				foreach (string connectionString in connectionStrings)
 				{
+					try
+					{
+						tempForErrorServerName = ConfigurationHandler.getServerNameFromConnectionString(connectionString);
+						#region Change SQL Server configuration like xp_cmdshell
+						SQLServer SQLServerWork = new SQLServer(connectionString, queries, outputPath, _debug, _useThread);
+						
+						#endregion
+						if (SQLServerWork.isConnectionSafe())
+						{
+							if (_useThread)
+							{
+								Task task = new Task(() => SQLServerWork.Run());
+								list.Add(task);
+								task.Start();
+							}
+							else
+							{
+								SQLServerWork.Run();
+							}
+						}
+						else
+						{
+							
+							continue;
+						}
 
-                    try
-                    {
-                        #region Change SQL Server configuration like xp_cmdshell
-                        SQLServer SQLServerWork = new SQLServer(connectionString, queries, outputPath, _debug, _useThread);
-					    #endregion
-                        if (SQLServerWork.isConnectionSafe())
-                        {
-                            if (_useThread)
-                            {
-                                Task task = new Task(() => SQLServerWork.Run());
-                                list.Add(task);
-                                task.Start();
-                            }
-                            else
-                            {
-                                SQLServerWork.Run();
-                            }
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                        
-                    }
-                    catch (Exception)
-                    {
-                        
-                        throw;
-                    }
+					}
+					catch (Exception)
+					{
+						throw;
+					}
 
-					
 
-                }
-                if (_useThread) Task.WaitAll(list.ToArray());
-				
+
+				}
+				if (_useThread) Task.WaitAll(list.ToArray());
+
 			}
 			catch (Exception e)
 			{
 				var s = new StackTrace(e);
 				var thisasm = Assembly.GetExecutingAssembly();
 				var methodname = s.GetFrames().Select(f => f.GetMethod()).First(m => m.Module.Assembly == thisasm).Name;
-                errorDetail = String.Concat("Method Name:", methodname.ToString(), Environment.NewLine, e.ToString());
+				errorDetail = String.Concat("Method Name:", methodname.ToString(), Environment.NewLine, e.ToString());
+				insertAppErrors("General", errorDetail,0, tempForErrorServerName, true);
+				//AppErrors.Add(new AppError() { Error = new Exception(errorDetail), ServerName = String.Empty, PrintOnScreen = true });
 
-                AppErrors.Add(new AppError() { Error = new Exception(errorDetail), ServerName = String.Empty, PrintOnScreen = true });
-				
 			}
-EndOfApp:
-            if (AppErrors.Count(p => p.ServerName == String.Empty) > 0)
-			{
-				errorDetail = String.Empty;
-                string totalErrorDetail = String.Empty;
-                foreach (AppError errItem in AppErrors)
-                {
-                    if (errItem.ServerName == String.Empty)
-                    {
-                        totalErrorDetail += errItem.Error.ToString() + Environment.NewLine;
 
-                        if (errItem.PrintOnScreen)
-                            errorDetail += errItem.Error.ToString();
-                    }
+
+			#region Zip & ftp
+			string _ZipFile = outputPath + DateTime.Now.ToString("yyyyMMdd") + "-Report-" + ConfigurationHandler.GetClientName() + ".zip";
+
+			try
+			{
+				ConfigurationHandler.CreateZipFile(_ZipFile, OutputFiles);
+				if (_useFTP) ConfigurationHandler.uploadFileWithFTP(OutputFiles, FTPUserName, FTPPassword);
+				//ConfigurationHandler.uploadFileWithFTP(_ZipFile);
+			}
+			catch (Exception e)
+			{
+
+				AppErrors.Add(new AppError() { Error = e, ServerName = String.Empty, PrintOnScreen = true });
+			}
+			#endregion
+
+			EndOfApp:
+
+			//if (AppErrors.Count(p => p.ServerName == String.Empty) > 0)
+			//{
+				errorDetail = String.Empty;
+				string totalErrorDetail = String.Empty;
+				foreach (AppError errItem in AppErrors)
+				{
+					if (errItem.ServerName == String.Empty)
+					{
+						totalErrorDetail += errItem.Error.ToString() + Environment.NewLine;
+
+						if (errItem.PrintOnScreen)
+							errorDetail += errItem.Error.ToString();
+					}
 				}
 
 				if (_debug)
@@ -213,265 +253,330 @@ EndOfApp:
 
 					if (errorDetail != String.Empty)
 					{
-                        printToScreen(String.Empty, String.Empty, errorDetail);
+						printToScreen(String.Empty, String.Empty, errorDetail);
 					}
 				}
-                writePublicToAppendFile(totalErrorDetail.Replace("\n",Environment.NewLine));
+				writePublicToAppendFile(totalErrorDetail.Replace("\n", Environment.NewLine));
 
-                OutputFiles.Add(fileErrorPathOut);
+				OutputFiles.Add(fileErrorPathOut);
+			//}
+			if (_debug)
+			{
+				Console.WriteLine("\nPress enter to close...");
+				Console.ReadLine();
+			}
+		}
+
+		public static void writeErrorsOnServerToFile(string serverName)
+		{
+			string _Error = String.Empty;
+			if (AppErrors.Count(p => p.ServerName == serverName) > 0)
+			{
+				foreach (AppError errItem in AppErrors)
+				{
+					if (errItem.ServerName == serverName)
+						_Error += errItem.Error.ToString() + Environment.NewLine;
+
+				}
+				_Error = String.Concat(Environment.NewLine, serverName, "::", Environment.NewLine, "----------------------------------------", Environment.NewLine, _Error);
+				writePublicToAppendFile(_Error.Replace("\n", Environment.NewLine));
 			}
 
 
-            ConfigurationHandler.CreateZipFile(outputPath + DateTime.Now.ToString("yyyyMMdd") + "-Report-" + ConfigurationHandler.GetClientName() + ".zip", OutputFiles);
-            if (_debug)
-            {
-                Console.WriteLine("\nPress enter to close...");
-                Console.ReadLine();
-            }
-        }
+		}
 
-        public static void writeErrorsOnServerToFile(string serverName)
-        {
-            string _Error = String.Empty;
-            if (AppErrors.Count(p => p.ServerName == serverName) > 0)
-            {
-                foreach (AppError errItem in AppErrors)
-                {
-                    if (errItem.ServerName == serverName)
-                    _Error += errItem.Error.ToString() + Environment.NewLine;
+		public static void writePublicFile(string Content)
+		{
+			writeFile(fileErrorPathOut, Content);
+			writeFile(fileErrorPathBin, Content);
+		}
 
-                }
-                _Error = String.Concat(Environment.NewLine, serverName, "::", Environment.NewLine, "----------------------------------------", Environment.NewLine, _Error);
-                writePublicToAppendFile(_Error.Replace("\n", Environment.NewLine));
-            }
+		public static void writePublicToAppendFile(string Content)
+		{
+			writeToAppendFile(fileErrorPathOut, Content);
+			writeToAppendFile(fileErrorPathBin, Content);
+
+		}
+
+		private static void writeFile(string FullFilePath, string Content)
+		{
+			if (File.Exists(FullFilePath))
+			{
+				File.Delete(FullFilePath);
+			}
+			File.WriteAllText(FullFilePath, Content);
+		}
+
+		private static void writeToAppendFile(string FullFilePath, string Content)
+		{
+			Content = Content.Replace("\n", Environment.NewLine);
+			if (File.Exists(FullFilePath))
+			{
+				File.AppendAllText(FullFilePath, Content);
+			}
+			else writeFile(FullFilePath, Content);
+
+		}
+
+		private static void insertDebugError(string Subject, string Error, int Duration, string ServerName)
+		{
+
+			DebugErrors.Add(new DebugError() { Subject = Subject, Error = (string.IsNullOrEmpty(Error) && Duration > _durationLimit) ? String.Format("Timeout occurred. waiting for {0} seconds.", Duration) : Error, Duration = Duration, ServerName = ServerName });
+
+		}
+
+		private static void insertAppErrors(string Subject, string Error, int Duration, string ServerName, Boolean PrintOnScreen)
+		{
+
+			AppErrors.Add(new AppError() { Error = new Exception(String.Concat(ServerName, ".", Subject, ": ", (string.IsNullOrEmpty(Error) && Duration > _durationLimit) ? String.Concat("Query run successfully! but execution has been taking too long(", Duration.ToString(), " sec)") : Error)), ServerName = ServerName, PrintOnScreen = PrintOnScreen });
+
+		}
 
 
-        }
-			
-        public static void writePublicFile(string Content)
-        {
-            writeFile(fileErrorPathOut, Content);
-            writeFile(fileErrorPathBin, Content);
-        }
 
-        public static void writePublicToAppendFile(string Content)
-        {
-            writeToAppendFile(fileErrorPathOut, Content);
-            writeToAppendFile(fileErrorPathBin, Content);
-            
-        }
-
-        private static void writeFile(string FullFilePath,string Content)
-        {
-            if (File.Exists(FullFilePath))
-            {
-                File.Delete(FullFilePath);
-            }
-            File.WriteAllText(FullFilePath, Content);
-        }
-
-        private static void writeToAppendFile(string FullFilePath, string Content)
-        {
-            Content = Content.Replace("\n", Environment.NewLine);
-            if (File.Exists(FullFilePath))
-            {
-                File.AppendAllText(FullFilePath, Content);
-            }
-            else writeFile(FullFilePath, Content);
-            
-        }        
-
-        private static void insertDebugError(string Subject,string Error, int Duration, string ServerName)
-        {
-
-            DebugErrors.Add(new DebugError() { Subject = Subject, Error = (string.IsNullOrEmpty(Error) && Duration > _durationLimit) ? String.Format("Timeout occurred. waiting for {0} seconds.", Duration) : Error, Duration = Duration, ServerName = ServerName });
-
-        }
-
-        private static void insertAppErrors(string Subject, string Error, int Duration, string ServerName, Boolean PrintOnScreen)
-        {
-
-            AppErrors.Add(new AppError() { Error = new Exception(String.Concat(ServerName, ".", Subject, ": ", (string.IsNullOrEmpty(Error) && Duration > _durationLimit) ? String.Concat("Query run successfully! but execution has been taking too long(", Duration.ToString(), " sec)") : Error)), ServerName = ServerName, PrintOnScreen = PrintOnScreen });
-
-        }
-
-        
-
-        #region Print To Screen
-        private static void printToScreen(string serverName, string Erea, string Error)
-        {
-            if (_debug)
-            {
+		#region Print To Screen
+		private static void printToScreen(string serverName, string Erea, string Error)
+		{
+			if (_debug)
+			{
 				serverName = (serverName == ".") ? System.Environment.GetEnvironmentVariable("COMPUTERNAME") : serverName;
-                Console.ForegroundColor = ConsoleColor.Red;
-                if (_useThread && !String.IsNullOrEmpty(serverName) && !String.IsNullOrEmpty(Erea))
-                {
-                    Console.WriteLine("\n{0}::Running script {1} - \n{2}", serverName, Erea, Error);
-                }
-                else
-                {
-                    Console.WriteLine("\n" + Error);
-                }
-                Console.ForegroundColor = ConsoleColor.White;
-            }
-        }
+				Console.ForegroundColor = ConsoleColor.Red;
+				if (_useThread && !String.IsNullOrEmpty(serverName) && !String.IsNullOrEmpty(Erea))
+				{
+					Console.WriteLine("\n{0}::Running script {1} - \n{2}", serverName, Erea, Error);
+				}
+				else
+				{
+					Console.WriteLine("\n" + Error);
+				}
+				Console.ForegroundColor = ConsoleColor.White;
+			}
+		}
 
-        private static void printToScreen(string serverName, string message)
-        {
-            if (_debug)
-            {
+		private static void printToScreen(string serverName, string message)
+		{
+			if (_debug)
+			{
 				serverName = (serverName == ".") ? System.Environment.GetEnvironmentVariable("COMPUTERNAME") : serverName;
 				Console.WriteLine("\n{0}:: {1}\n", serverName, message);
-            }
-        }
+			}
+		}
 
-        private static void printToScreen(string serverName,string Erea,Boolean IsStart )
-        {
-            if (_debug)
-            {
+		private static void printToScreen(string serverName, string Erea, Boolean IsStart)
+		{
+			if (_debug)
+			{
 				serverName = (serverName == ".") ? System.Environment.GetEnvironmentVariable("COMPUTERNAME") : serverName;
 				if (IsStart)
-                {
-                    if (_useThread)
-                    {
-                        Console.WriteLine("\n{0}::Running Script {1}...", serverName, Erea);
-                    }
-                    else
-                    {
-                        Console.WriteLine("\nRunning script {0}...", Erea);
-                    }
-                    return;
-                }
-                if (!IsStart)
-                {
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    if (_useThread)
-                    {
-                        Console.WriteLine("\n{0}::Script {1} - Run Successfully!", serverName, Erea);
-                    }
-                    else
-                    {
-                        Console.WriteLine(" - Run Successfully!");
-                    }
-                }
-                Console.ForegroundColor = ConsoleColor.White;
-            }
-        }
-        #endregion
+				{
+					if (_useThread)
+					{
+						Console.WriteLine("\n{0}::Running Script {1}...", serverName, Erea);
+					}
+					else
+					{
+						Console.WriteLine("\nRunning script {0}...", Erea);
+					}
+					return;
+				}
+				if (!IsStart)
+				{
+					Console.ForegroundColor = ConsoleColor.Green;
+					if (_useThread)
+					{
+						Console.WriteLine("\n{0}::Script {1} - Run Successfully!", serverName, Erea);
+					}
+					else
+					{
+						Console.WriteLine(" - Run Successfully!");
+					}
+				}
+				Console.ForegroundColor = ConsoleColor.White;
+			}
+		}
+		#endregion
 
-        private static void getInfoFromServer(string connectionString, List<SQLScript> queries, string outputPath, Boolean debug, Boolean useThread, string serverName)
-        {
+		private static void getInfoFromServer(string connectionString, List<SQLScript> queries, string outputPath, Boolean debug, Boolean useThread, string serverName)
+		{
 
-            string FullFilePath;
-            DateTime StartTime;
-            int Duration;
-            string Error;
-            string _subject;
-            string connectionStringServerName = String.Empty;
+			string FullFilePath;
+			DateTime StartTime;
+			int Duration;
+			string Error;
+			string _subject;
+			string connectionStringServerName = String.Empty;
+			Boolean _isLinuxOS = true;
 
 			XNamespace xsiNs = ConfigurationHandler.GetXsiNs();
-            connectionStringServerName = ConfigurationHandler.getServerNameFromConnectionString(connectionString);
-            
-            XmlWork xmlWork = new XmlWork(connectionString, serverName, debug, useThread);
-            List<Task> list = new List<Task>();
+			connectionStringServerName = ConfigurationHandler.getServerNameFromConnectionString(connectionString);
 
-            foreach (SQLScript query in queries)
-            {
-                try
-                {
-                    if (useThread)
-                    {
-                        Task task = new Task(() => xmlWork.Run(query));
-                        list.Add(task);
-                        task.Start();
-                    }
-                    else
-                    {
-                        xmlWork.Run(query);
-                    }
-                }
-                catch (Exception)
-                {
+			XmlWork xmlWork = new XmlWork(connectionString, serverName, debug, useThread);
+			List<Task> list = new List<Task>();
+			_isLinuxOS = ConfigurationHandler.getIsLinuxOS(connectionString);
+			foreach (SQLScript query in queries)
+			{
+				try
+				{
+					if (useThread)
+					{
+						Task task = new Task(() => xmlWork.Run(query));
+						list.Add(task);
+						task.Start();
+					}
+					else
+					{
+						xmlWork.Run(query);
+					}
+				}
+				catch (Exception)
+				{
 
-                    throw;
-                }
-            }
+					throw;
+				}
+			}
 
 			Task.WaitAll(list.ToArray());
 
 			XElement xml = xmlWork.GetElement();
 
-            #region Nodes Info
-            //Nodes Info
-            _subject = "Nodes";
-            Error = String.Empty;
-            StartTime = DateTime.Now;
-            try
-            {
-                printToScreen(serverName, _subject, true);
-                var xEleSQLClusterNode = ConfigurationHandler.getNodesInfo(connectionString);
-                xml.AddFirst(xEleSQLClusterNode);
-                printToScreen(serverName, _subject, false);
-            }
-            catch (Exception se)
-            {
-                Error = se.Message.ToString();
-                printToScreen(serverName, _subject, Error);
-            }
-            Duration = (DateTime.Now - StartTime).Seconds;
-            if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
-            {
-                insertDebugError(_subject,Error , Duration, serverName);
-                insertAppErrors(_subject,Error, Duration, serverName, false);
-            }
-            #endregion
+			#region Disk Information
+			_subject = "DiskInfo";
+			Error = String.Empty;
+			StartTime = DateTime.Now;
+			try
+			{
+				XElement xEleDiskInfo;
+				printToScreen(serverName, _subject, true);
+				if (_isLinuxOS)
+				{
+					xEleDiskInfo = ConfigurationHandler.getVolumeInfoLinux(serverName);
+					xml.AddFirst(xEleDiskInfo);
+				}
+				else
+				{
+					xEleDiskInfo = ConfigurationHandler.getVolumeInfo(serverName);
+					xml.AddFirst(xEleDiskInfo);
+				}
 
-            #region Login Info
-            _subject = "InvalidLogin";
-            Error = String.Empty;
-            StartTime = DateTime.Now;
-            try
-            {
-                printToScreen(serverName, _subject, true);
-                var xEleSQLInvalidLogin = ConfigurationHandler.getUnevenLogins(connectionString, serverName);
-                xml.AddFirst(xEleSQLInvalidLogin);
-                printToScreen(serverName, _subject, false);
-            }
-            catch (Exception se)
-            {
-                Error = se.Message.ToString();
-                printToScreen(serverName, _subject, Error);
-            }
-            Duration = (DateTime.Now - StartTime).Seconds;
-            if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
-            {
-                insertDebugError(_subject,Error, Duration,serverName);
-                insertAppErrors(_subject,Error , Duration, serverName, false);
-            }
-            #endregion
+				printToScreen(serverName, _subject, false);
+			}
+			catch (Exception se)
+			{
+				Error = se.Message.ToString();
+				printToScreen(serverName, _subject, Error);
+			}
+			Duration = (DateTime.Now - StartTime).Seconds;
+			if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
+			{
+				insertDebugError(_subject, Error, Duration, serverName);
+				insertAppErrors(_subject, Error, Duration, serverName, false);
+			}
+			#endregion
 
-            #region SQL Backup
-            _subject = "UrgentBackup";
-            Error = String.Empty;
-            StartTime = DateTime.Now;
-            try
-            {
-                printToScreen(serverName, _subject, true);
-                var xEleSQLServerBakup = ConfigurationHandler.getSQLServerBackup(connectionString);
-                xml.AddFirst(xEleSQLServerBakup);
-                printToScreen(serverName, _subject, false);
-            }
-            catch (Exception se)
-            {
-                Error = se.Message.ToString();
-                printToScreen(serverName, _subject, Error);
-            }
-            Duration = (DateTime.Now - StartTime).Seconds;
-            if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
-            {
-                insertDebugError(_subject,Error , Duration, serverName);
-                insertAppErrors(_subject,Error , Duration, serverName, false);
-            }
+			#region Event Viewer
+			_subject = "EventViewer";
+			Error = String.Empty;
+			StartTime = DateTime.Now;
+			try
+			{
+				XElement xEleEventViewer;
+				printToScreen(serverName, _subject, true);
+				if (_isLinuxOS)
+				{
+					//TODO
+				}
+				else
+				{
+					xEleEventViewer = ConfigurationHandler.getEventViewerInfo(serverName);
+					xml.AddFirst(xEleEventViewer);
+				}
+
+				printToScreen(serverName, _subject, false);
+			}
+			catch (Exception se)
+			{
+				Error = se.Message.ToString();
+				printToScreen(serverName, _subject, Error);
+			}
+			Duration = (DateTime.Now - StartTime).Seconds;
+			if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
+			{
+				insertDebugError(_subject, Error, Duration, serverName);
+				insertAppErrors(_subject, Error, Duration, serverName, false);
+			}
+			#endregion
+
+			#region Nodes Info
+			//Nodes Info
+			_subject = "Nodes";
+			Error = String.Empty;
+			StartTime = DateTime.Now;
+			try
+			{
+				printToScreen(serverName, _subject, true);
+				var xEleSQLClusterNode = ConfigurationHandler.getNodesInfo(connectionString);
+				xml.AddFirst(xEleSQLClusterNode);
+				printToScreen(serverName, _subject, false);
+			}
+			catch (Exception se)
+			{
+				Error = se.Message.ToString();
+				printToScreen(serverName, _subject, Error);
+			}
+			Duration = (DateTime.Now - StartTime).Seconds;
+			if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
+			{
+				insertDebugError(_subject, Error, Duration, serverName);
+				insertAppErrors(_subject, Error, Duration, serverName, false);
+			}
+			#endregion
+
+			#region Login Info
+			_subject = "InvalidLogin";
+			Error = String.Empty;
+			StartTime = DateTime.Now;
+			try
+			{
+				printToScreen(serverName, _subject, true);
+				var xEleSQLInvalidLogin = ConfigurationHandler.getUnevenLogins(connectionString, serverName);
+				xml.AddFirst(xEleSQLInvalidLogin);
+				printToScreen(serverName, _subject, false);
+			}
+			catch (Exception se)
+			{
+				Error = se.Message.ToString();
+				printToScreen(serverName, _subject, Error);
+			}
+			Duration = (DateTime.Now - StartTime).Seconds;
+			if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
+			{
+				insertDebugError(_subject, Error, Duration, serverName);
+				insertAppErrors(_subject, Error, Duration, serverName, false);
+			}
+			#endregion
+
+			#region SQL Backup
+			_subject = "UrgentBackup";
+			Error = String.Empty;
+			StartTime = DateTime.Now;
+			try
+			{
+				printToScreen(serverName, _subject, true);
+				var xEleSQLServerBakup = ConfigurationHandler.getSQLServerBackup(connectionString, _subject);
+				xml.AddFirst(xEleSQLServerBakup);
+				printToScreen(serverName, _subject, false);
+			}
+			catch (Exception se)
+			{
+				Error = se.Message.ToString();
+				printToScreen(serverName, _subject, Error);
+			}
+			Duration = (DateTime.Now - StartTime).Seconds;
+			if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
+			{
+				insertDebugError(_subject, Error, Duration, serverName);
+				insertAppErrors(_subject, Error, Duration, serverName, false);
+			}
 			#endregion
 
 			#region SQL Error Log
@@ -493,87 +598,102 @@ EndOfApp:
 			Duration = (DateTime.Now - StartTime).Seconds;
 			if ((Duration > _durationLimit) || (!string.IsNullOrEmpty(Error)))
 			{
-				insertDebugError(_subject,Error , Duration, serverName);
-				insertAppErrors(_subject,Error , Duration, serverName, false);
+				insertDebugError(_subject, Error, Duration, serverName);
+				insertAppErrors(_subject, Error, Duration, serverName, false);
 			}
 			#endregion
 
 			#region DebugError
-			var xEleDebugErrors = new XElement(xsiNs + "DebugError",
-        from DebugError in DebugErrors
-        where DebugError.ServerName == serverName
-        select new XElement(xsiNs + "DebugError_Data",
-                     new XElement("Subject", DebugError.Subject),
-                       new XElement("Error", DebugError.Error),
-                       new XElement("Duration", DebugError.Duration)
-                   ));
-            xml.AddFirst(xEleDebugErrors);
-            #endregion
-            string _fileName = DateTime.Now.ToString("yyyyMMdd") + "-Report-" + serverName.Replace(@"\", "@") + ".xml";
-            FullFilePath = outputPath + _fileName;
-            writeFile(FullFilePath, xml.ToString());
-            OutputFiles.Add(FullFilePath);
-        }
+			_subject = "DebugError";
+			var xEleDebugErrors = new XElement(_subject,
+		from DebugError in DebugErrors
+		where DebugError.ServerName == serverName
+		select new XElement(_subject + "_Data",
+						 new XAttribute(XNamespace.Xmlns + "xsi",
+							  "http://www.w3.org/2001/XMLSchema-instance"),
+					 new XElement("Subject", DebugError.Subject),
+					   new XElement("Error", DebugError.Error),
+					   new XElement("Duration", DebugError.Duration)
+				   ));
+			xml.AddFirst(xEleDebugErrors);
+			#endregion
 
-        private static XElement runSQLScript(string connectionString, SQLScript query, XNamespace xsiNs, string serverName, Boolean debug, Boolean useThread)
-        {
+			string _fileName = DateTime.Now.ToString("yyyyMMdd") + "-Report-" + serverName.Replace(@"\", "@") + ".xml";
+			FullFilePath = outputPath + _fileName;
+			writeFile(FullFilePath, xml.ToString());
+			OutputFiles.Add(FullFilePath);
+		}
 
-            
-            DateTime StartTime;
-            int Duration;
-            string Error;
-            XElement result = null;
-            int _MaxSQLQueryTimeout = ConfigurationHandler.GetSQLQueryTimeout();
-
-            #region Run SQL Script File
-            printToScreen(serverName, query.FileName, true);
-            using (var conn = new SqlConnection(connectionString))
-            {
-                Error = String.Empty;
-                conn.Open();
-                Duration = 999;
-                StartTime = DateTime.Now;
-                IEnumerable<dynamic> dynamicResult = null;
-                var p = new DynamicParameters();
-                IDbTransaction transaction = null;
-                try
-                {
-                    dynamicResult = conn.Query(SQLPrefix + query.Content, p, transaction, buffered: false, commandTimeout: _MaxSQLQueryTimeout, commandType: CommandType.Text);
+		private static XElement runSQLScript(string connectionString, SQLScript query, XNamespace xsiNs, string serverName, Boolean debug, Boolean useThread)
+		{
 
 
-                    var resultXml = dynamicResult.ToXml(query.FileName, xsiNs + query.FileName + "_Data");
-                    Duration = (DateTime.Now - StartTime).Seconds;
+			DateTime StartTime;
+			int Duration;
+			string Error;
+			XElement result = null;
+			int _MaxSQLQueryTimeout = ConfigurationHandler.GetSQLQueryTimeout();
+            string tempInnerXML = String.Empty;
+			#region Run SQL Script File
+			printToScreen(serverName, query.FileName, true);
+			using (var conn = new SqlConnection(connectionString))
+			{
+				Error = String.Empty;
+				conn.Open();
+				Duration = 999;
+				StartTime = DateTime.Now;
+				IEnumerable<dynamic> dynamicResult = null;
+				var p = new DynamicParameters();
+				IDbTransaction transaction = null;
+				try
+				{
+					dynamicResult = conn.Query(SQLPrefix + query.Content, p, transaction, buffered: false, commandTimeout: _MaxSQLQueryTimeout, commandType: CommandType.Text);
 
-                    result = resultXml;
-                    printToScreen(serverName, query.FileName, false);
+					result = dynamicResult.ToXml(query.FileName, query.FileName + "_Data");
+					if (dynamicResult.Count() > 0)
+					{
+						XElement rootXML = new XElement(query.FileName);
+						foreach (XElement innerXML in result.Elements(query.FileName + "_Data"))
+						{
+							innerXML.Add(new XAttribute(XNamespace.Xmlns + "xsi",
+							  "http://www.w3.org/2001/XMLSchema-instance"));
+                            tempInnerXML = innerXML.ToString().Replace(">true<", ">1<").Replace(">false<", ">0<");
 
-                }
-                catch (SqlException se)
-                {
-                    if (Duration == 999) Duration = (DateTime.Now - StartTime).Seconds;
-                    if (se.Number == -2)
-                    {
-                        Error = String.Format("Timeout occurred. waiting for {0} seconds.", Duration);
-                    }
-                    else Error = se.Message.ToString();
-                    printToScreen(serverName, query.FileName, Error);
-                }
+                            rootXML.Add(XElement.Parse(tempInnerXML));
+						}
+						result = rootXML;
+					}
+					Duration = (DateTime.Now - StartTime).Seconds;
 
-                if ((Duration > 15) || (!string.IsNullOrEmpty(Error)))
-                {
-                    insertDebugError(query.FileName, Error, Duration, serverName);
-                    //insertAppErrors(_subject, Error, Duration, serverName, false);
-                    AppErrors.Add(new AppError() { Error = new Exception(String.Concat(serverName, ".", query.FileName, ": ", (string.IsNullOrEmpty(Error)) ? String.Concat("Query run successfully! but execution has been taking too long(", Duration.ToString(), " sec)") : Error)), ServerName = serverName, PrintOnScreen = false });
-                }
+					printToScreen(serverName, query.FileName, false);
 
-                return result;
-            }
+				}
+				catch (SqlException se)
+				{
+					if (Duration == 999) Duration = (DateTime.Now - StartTime).Seconds;
+					if (se.Number == -2)
+					{
+						Error = String.Format("Timeout occurred. waiting for {0} seconds.", Duration);
+					}
+					else Error = se.Message.ToString();
+					printToScreen(serverName, query.FileName, Error);
+				}
+
+				if ((Duration > 15) || (!string.IsNullOrEmpty(Error)))
+				{
+					insertDebugError(query.FileName, Error, Duration, serverName);
+					//insertAppErrors(_subject, Error, Duration, serverName, false);
+					AppErrors.Add(new AppError() { Error = new Exception(String.Concat(serverName, ".", query.FileName, ": ", (string.IsNullOrEmpty(Error)) ? String.Concat("Query run successfully! but execution has been taking too long(", Duration.ToString(), " sec)") : Error)), ServerName = serverName, PrintOnScreen = false });
+				}
+
+				return result;
+			}
 
 			#endregion
 
 
 		}
-		
+
 		#region Calsses
 		class SQLServer
 		{
@@ -587,11 +707,11 @@ EndOfApp:
 			List<SQLScript> _queries;
 			string _outputPath;
 			string _serverName;
-            Boolean _connectionSafe;
+			Boolean _connectionSafe;
 			#endregion
 
 
-            public SQLServer(string connectionString, List<SQLScript> queries, string outputPath, Boolean debug, Boolean useThread)
+			public SQLServer(string connectionString, List<SQLScript> queries, string outputPath, Boolean debug, Boolean useThread)
 			{
 				object _lock = new object();
 				_debug = debug;
@@ -600,57 +720,58 @@ EndOfApp:
 				_queries = queries;
 				_connectionString = connectionString;
 				_serverName = ConfigurationHandler.getServerNameFromConnectionString(_connectionString);
-                if (getServerNamebySQLServerConnection())
-                {
-                    _connectionSafe = true;
-                    getSQLServerSpconfigureState();
-                    if (!_xp_cmdshell)
-                        set_xp_cmdshell(true);
-                }
-                else { _connectionSafe = false; }
+				if (getServerNamebySQLServerConnection())
+				{
+					_connectionSafe = true;
+					getSQLServerSpconfigureState();
+					if (!_xp_cmdshell)
+						set_xp_cmdshell(true);
+				}
+				else { _connectionSafe = false; }
 			}
 
-            public Boolean isConnectionSafe()
-            {
-                return _connectionSafe;
-            }
+			public Boolean isConnectionSafe()
+			{
+				return _connectionSafe;
+			}
 
-            private Boolean getServerNamebySQLServerConnection()
-            {
-                #region checkSQLServerConnection
-                try
-                {
-                    if (_debug)
-                    {
-                        Console.ForegroundColor = ConsoleColor.DarkMagenta;
-                        Console.WriteLine("\n\nConnecting to server ");
-                        Console.ForegroundColor = ConsoleColor.Magenta;
-                        Console.WriteLine("{0}", (_serverName == ".") ? System.Environment.GetEnvironmentVariable("COMPUTERNAME") : _serverName);
-                        Console.ForegroundColor = ConsoleColor.DarkMagenta;
-                        Console.WriteLine("...");
-                        Console.ForegroundColor = ConsoleColor.White;
-                    }
-                    _serverName = ConfigurationHandler.checkSQLServerConnection(_connectionString, SQLPrefix);
-                    if (_debug)
-                    {
-                        Console.ForegroundColor = ConsoleColor.DarkGreen;
-                        Console.WriteLine("\nConnection to server ");
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("{0} ", (_serverName == ".") ? System.Environment.GetEnvironmentVariable("COMPUTERNAME") : _serverName);
-                        Console.ForegroundColor = ConsoleColor.DarkGreen;
-                        Console.WriteLine("succeeded!");
-                        Console.ForegroundColor = ConsoleColor.White;
-                    }
-                    return true;
-                }
-                catch (Exception serverNameError)
-                {
-                    AppErrors.Add(new AppError() { Error = new Exception(serverNameError.Message.ToString()), ServerName = _serverName, PrintOnScreen = false });
+			private Boolean getServerNamebySQLServerConnection()
+			{
+				#region checkSQLServerConnection
+				try
+				{
+					if (_debug)
+					{
+						Console.ForegroundColor = ConsoleColor.DarkMagenta;
+						Console.WriteLine("\n\nConnecting to server ");
+						Console.ForegroundColor = ConsoleColor.Magenta;
+						Console.WriteLine("{0}", (_serverName == ".") ? System.Environment.GetEnvironmentVariable("COMPUTERNAME") : _serverName);
+						Console.ForegroundColor = ConsoleColor.DarkMagenta;
+						Console.WriteLine("...");
+						Console.ForegroundColor = ConsoleColor.White;
+					}
+					_serverName = ConfigurationHandler.checkSQLServerConnection(_connectionString, SQLPrefix);
+					if (_debug)
+					{
+						Console.ForegroundColor = ConsoleColor.DarkGreen;
+						Console.WriteLine("\nConnection to server ");
+						Console.ForegroundColor = ConsoleColor.Green;
+						Console.WriteLine("{0} ", (_serverName == ".") ? System.Environment.GetEnvironmentVariable("COMPUTERNAME") : _serverName);
+						Console.ForegroundColor = ConsoleColor.DarkGreen;
+						Console.WriteLine("succeeded!");
+						Console.ForegroundColor = ConsoleColor.White;
+					}
+					return true;
+				}
+				catch (Exception serverNameError)
+				{
+					//AppErrors.Add(new AppError() { Error = new Exception(serverNameError.Message.ToString()), ServerName = _serverName, PrintOnScreen = false });
+					insertAppErrors("Connection", serverNameError.Message.ToString(), 0, (_serverName == String.Empty) ? ConfigurationHandler.getServerNameFromConnectionString(_connectionString) : _serverName, false);
 					printToScreen(_serverName, "checkSQLServerConnection", serverNameError.Message.ToString());
-                    return false;
-                }
-                #endregion
-            }
+					return false;
+				}
+				#endregion
+			}
 
 			private void getSQLServerSpconfigureState()
 			{
@@ -686,7 +807,7 @@ EndOfApp:
 					}
 					catch (Exception ex)
 					{
-						throw new Exception(String.Concat("\nError when changing server config values"),ex);
+						throw new Exception(String.Concat("\nError when changing server config values"), ex);
 					}
 				}
 			}
@@ -694,14 +815,14 @@ EndOfApp:
 			public void Run()
 			{
 
-                Program.getInfoFromServer(_connectionString, _queries, _outputPath, _debug, _useThread, _serverName);
+				Program.getInfoFromServer(_connectionString, _queries, _outputPath, _debug, _useThread, _serverName);
 
 				lock (_lock)
 				{
 					set_xp_cmdshell(false);
-                    printToScreen(_serverName, "**** Has finised running scripts ****");
+					printToScreen(_serverName, "**** Has finised running scripts ****");
 
-                    writeErrorsOnServerToFile(_serverName);
+					writeErrorsOnServerToFile(_serverName);
 				}
 			}
 
@@ -769,7 +890,7 @@ RECONFIGURE WITH OVERRIDE;");
 						}
 						catch (Exception)
 						{
-							error = String.Concat("\n", (_serverName==".") ? Environment.MachineName : _serverName, ":: Error when changing server config ", attribute);
+							error = String.Concat("\n", (_serverName == ".") ? Environment.MachineName : _serverName, ":: Error when changing server config ", attribute);
 							throw new Exception(error);
 						}
 					}
@@ -782,7 +903,7 @@ RECONFIGURE WITH OVERRIDE;");
 				}
 				catch (Exception serverError)
 				{
-                    AppErrors.Add(new AppError() { Error = new Exception(serverError.Message.ToString()), ServerName = _serverName, PrintOnScreen = false });
+					AppErrors.Add(new AppError() { Error = new Exception(serverError.Message.ToString()), ServerName = _serverName, PrintOnScreen = false });
 					if (_debug)
 					{
 						Console.ForegroundColor = ConsoleColor.Red;
@@ -810,7 +931,9 @@ RECONFIGURE WITH OVERRIDE;");
 
 			public XmlWork(string connectionString, string serverName, Boolean debug, Boolean useThread)
 			{
-				_element = new XElement(xsiNs + "Report");
+				_element = new XElement("Report",
+						 new XAttribute(XNamespace.Xmlns + "xsi",
+							  "http://www.w3.org/2001/XMLSchema-instance"));
 				_connectionString = connectionString;
 				_serverName = serverName;
 				_debug = debug;
@@ -838,7 +961,7 @@ RECONFIGURE WITH OVERRIDE;");
 		// Define a class to receive parsed values
 		class Options
 		{
-			[Option('m', "multithreading", DefaultValue = true,
+			[Option('m', "multithreading", DefaultValue = false,
 			  HelpText = "Activate multithreading when running queries.")]
 			public bool multithreading { get; set; }
 
@@ -846,9 +969,18 @@ RECONFIGURE WITH OVERRIDE;");
 			  HelpText = "Prints all messages to standard output.")]
 			public bool debug { get; set; }
 
+			[Option('g', "github", DefaultValue = false,
+			  HelpText = "Update all sql files from GitHub repositorie.")]
+			public bool github { get; set; }
+
 			[Option('t', "taskScheduler", DefaultValue = false,
 			  HelpText = "Set task scheduler to work once a week.")]
 			public bool taskScheduler { get; set; }
+
+			[Option('f', "ftp", DefaultValue = true,
+			  HelpText = "Use ftp to upload the files.")]
+			public bool ftp { get; set; }
+
 			[ParserState]
 			public IParserState LastParserState { get; set; }
 
