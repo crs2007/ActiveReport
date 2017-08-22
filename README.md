@@ -27,7 +27,6 @@ SET DEADLOCK_PRIORITY LOW;
 * By default the etch SQL script run simultaneously on etch server(Multi Thread).
 * By default the process run simultaneously(Multi Thread) on all server that in the list.
 
-
 ### Parameters
 * m, "multithreading"- Activate multithreading when running queries. DefaultValue = true.
 * d, "debug"- Prints all messages to standard output. DefaultValue = false.
@@ -40,6 +39,9 @@ To get information on screen when the application is running-
 ```
 ActiveReport.exe -d "true" -m "true"
 ```
+### Prerequisite:
+* .NET 4.5.2([Web Installer](https://www.microsoft.com/en-us/download/details.aspx?id=42643)|[Offline Installer](https://www.microsoft.com/en-us/download/details.aspx?id=42642))
+* Local administrator on ethe SQL Server that you monitor. That because "[Access is denied](https://social.msdn.microsoft.com/Forums/vstudio/en-US/6229334e-d5ef-4016-9e7e-1c8718be8d43/access-is-denied-exception-from-hresult-0x80070005-eaccessdenied-in-vbnet?forum=netfxbcl&prof=required)" error when try OS methuds.
 
 ### To Do:
 * Add full support for Linux OS.
