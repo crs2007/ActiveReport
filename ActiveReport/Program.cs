@@ -37,12 +37,15 @@ namespace ActiveReport
 		public static string outputPath = @"C:\Output\";
 		public static string FTPUserName;
 		public static string FTPPassword;
+        public static bool logOutWrite = false;
 		#endregion
 		static void Main(string[] args)
 		{
 			#region Parameters
 			string errorDetail = String.Empty;
 			string destPath = outputPath;
+            if (ConfigurationHandler.GetConfigValue("LogFileOut") == "YES")
+                logOutWrite = true;
 			var options = new Options();
 			string toDo = @"To Do List:
 ";
@@ -69,15 +72,22 @@ namespace ActiveReport
 			}
 			catch (Exception ex)
 			{
-				AppErrors.Add(new AppError() { Error = new Exception(String.Concat("Error when delete AppError.txt file from - ", fileErrorPathBin), ex), ServerName = String.Empty, PrintOnScreen = true });
+                insertAppErrors("Files", String.Concat("Error when delete AppError.txt file from - ", fileErrorPathBin,". ",ex.Message), 0, String.Empty, true);
 				goto EndOfApp;
 			}
 			#endregion
 
 			#region Get FTP user and passwords
-			RijndaelCrypt EncriptC = new RijndaelCrypt("xxx");
-			FTPUserName = EncriptC.Decrypt(ConfigurationHandler.GetConfigValue("FTPUserName"));
-			FTPPassword = EncriptC.Decrypt(ConfigurationHandler.GetConfigValue("FTPPassword"));
+            try
+            {
+			    RijndaelCrypt EncriptC = new RijndaelCrypt("xxx");
+			    FTPUserName = EncriptC.Decrypt(ConfigurationHandler.GetConfigValue("FTPUserName"));
+			    FTPPassword = EncriptC.Decrypt(ConfigurationHandler.GetConfigValue("FTPPassword"));
+            }
+            catch (Exception ex)
+            {
+                insertAppErrors("ftp", ex.Message, 0, String.Empty, false);
+            }
 			#endregion
 
 			#region Parse Arguments
@@ -92,8 +102,7 @@ namespace ActiveReport
 					}
 					catch (Exception ex)
 					{
-						//if (ex.n)
-						AppErrors.Add(new AppError() { Error = new Exception("Error when updating SQL file form the GitHub repositorie.", ex), ServerName = String.Empty, PrintOnScreen = false });
+                        insertAppErrors("GitHub", "Error when updating SQL file form the GitHub repositorie.", 0, String.Empty, false);
 					}
 				}
 				if (!options.ftp) _useFTP = false;
@@ -112,12 +121,12 @@ namespace ActiveReport
 					{
 						if (ex.Message.Contains("Access is denied"))
 						{
-							printToScreen(String.Empty, String.Empty, "Please, open the app in Administrator mode and try again.");
-							AppErrors.Add(new AppError() { Error = new Exception("Error when tring create Task Schedule. Please, open the app in Administrator mode and try again.", ex), ServerName = String.Empty, PrintOnScreen = false });
+							printToScreen(String.Empty, String.Empty, "Please, open the app in Administrator mode and try again.");                            
+                            insertAppErrors("Schedule Task", "Error when tring create Task Schedule. Please, open the app in Administrator mode and try again.", 0, String.Empty, false);
 						}
 						else
 						{
-							AppErrors.Add(new AppError() { Error = new Exception("Error when tring create Task Schedule.", ex), ServerName = String.Empty, PrintOnScreen = true });
+                            insertAppErrors("Schedule Task", "Error when tring create Task Schedule.", 0, String.Empty, true);
 						}
 					}
 
@@ -210,24 +219,29 @@ namespace ActiveReport
 				var methodname = s.GetFrames().Select(f => f.GetMethod()).First(m => m.Module.Assembly == thisasm).Name;
 				errorDetail = String.Concat("Method Name:", methodname.ToString(), Environment.NewLine, e.ToString());
 				insertAppErrors("General", errorDetail,0, tempForErrorServerName, true);
-				//AppErrors.Add(new AppError() { Error = new Exception(errorDetail), ServerName = String.Empty, PrintOnScreen = true });
 
 			}
 
 
 			#region Zip & ftp
-			string _ZipFile = outputPath + DateTime.Now.ToString("yyyyMMdd") + "-Report-" + ConfigurationHandler.GetClientName() + ".zip";
+            try
+            {
+                if (_useFTP) ConfigurationHandler.uploadFileWithFTP(OutputFiles, FTPUserName, FTPPassword);
+            }
+            catch (Exception e)
+            {
+                insertAppErrors("ftp", e.Message, 0, String.Empty, true);
+            }
 
 			try
 			{
-				ConfigurationHandler.CreateZipFile(_ZipFile, OutputFiles);
-				if (_useFTP) ConfigurationHandler.uploadFileWithFTP(OutputFiles, FTPUserName, FTPPassword);
-				//ConfigurationHandler.uploadFileWithFTP(_ZipFile);
+                string _ZipFile = outputPath + DateTime.Now.ToString("yyyyMMdd") + "-Report-" + ConfigurationHandler.GetClientName() + ".zip";
+                if (ConfigurationHandler.GetConfigValue("Compress") == "YES")
+				    ConfigurationHandler.CreateZipFile(_ZipFile, OutputFiles);
 			}
 			catch (Exception e)
 			{
-
-				AppErrors.Add(new AppError() { Error = e, ServerName = String.Empty, PrintOnScreen = true });
+                insertAppErrors("Zip", e.Message, 0, String.Empty, true);
 			}
 			#endregion
 
@@ -237,17 +251,19 @@ namespace ActiveReport
 			//{
 				errorDetail = String.Empty;
 				string totalErrorDetail = String.Empty;
+                string GeneralErrorDetail = @"General Errors::\n
+----------------------------------------";
 				foreach (AppError errItem in AppErrors)
 				{
 					if (errItem.ServerName == String.Empty)
 					{
-						totalErrorDetail += errItem.Error.ToString() + Environment.NewLine;
+                        GeneralErrorDetail += Environment.NewLine + errItem.Error.Message.ToString();
 
 						if (errItem.PrintOnScreen)
-							errorDetail += errItem.Error.ToString();
+							errorDetail += errItem.Error.Message.ToString();
 					}
 				}
-
+                totalErrorDetail += Environment.NewLine + GeneralErrorDetail;
 				if (_debug)
 				{
 
@@ -275,7 +291,7 @@ namespace ActiveReport
 				foreach (AppError errItem in AppErrors)
 				{
 					if (errItem.ServerName == serverName)
-						_Error += errItem.Error.ToString() + Environment.NewLine;
+                        _Error += errItem.Error.ToString().Replace("System.Exception: " + serverName + ".", "") + Environment.NewLine;
 
 				}
 				_Error = String.Concat(Environment.NewLine, serverName, "::", Environment.NewLine, "----------------------------------------", Environment.NewLine, _Error);
@@ -287,14 +303,33 @@ namespace ActiveReport
 
 		public static void writePublicFile(string Content)
 		{
-			writeFile(fileErrorPathOut, Content);
-			writeFile(fileErrorPathBin, Content);
+            try
+            {
+                if (logOutWrite) 
+                    writeFile(fileErrorPathOut, Content);
+                else
+                    writeFile(fileErrorPathBin, Content);
+            }
+            catch (Exception)
+            {
+                writeFile(fileErrorPathBin, Content);
+            } 
+			
 		}
 
 		public static void writePublicToAppendFile(string Content)
 		{
-			writeToAppendFile(fileErrorPathOut, Content);
-			writeToAppendFile(fileErrorPathBin, Content);
+            try
+            {
+                if (logOutWrite)
+                    writeToAppendFile(fileErrorPathOut, Content);
+                else
+                    writeToAppendFile(fileErrorPathBin, Content);     
+            }
+            catch (Exception)
+            {
+			    writeToAppendFile(fileErrorPathBin, Content);
+            }
 
 		}
 
@@ -328,7 +363,7 @@ namespace ActiveReport
 		private static void insertAppErrors(string Subject, string Error, int Duration, string ServerName, Boolean PrintOnScreen)
 		{
 
-			AppErrors.Add(new AppError() { Error = new Exception(String.Concat(ServerName, ".", Subject, ": ", (string.IsNullOrEmpty(Error) && Duration > _durationLimit) ? String.Concat("Query run successfully! but execution has been taking too long(", Duration.ToString(), " sec)") : Error)), ServerName = ServerName, PrintOnScreen = PrintOnScreen });
+            AppErrors.Add(new AppError() { Error = new Exception(String.Concat(((ServerName == String.Empty) ? "" : ServerName + "."), (Subject == String.Empty) ? "" : Subject  + ": ", (string.IsNullOrEmpty(Error) && Duration > _durationLimit) ? String.Concat("Query run successfully! but execution has been taking too long(", Duration.ToString(), " sec)") : Error)), ServerName = ServerName, PrintOnScreen = PrintOnScreen });
 
 		}
 
@@ -727,7 +762,11 @@ namespace ActiveReport
 					if (!_xp_cmdshell)
 						set_xp_cmdshell(true);
 				}
-				else { _connectionSafe = false; }
+				else 
+                { 
+                    _connectionSafe = false;
+                    writeErrorsOnServerToFile(_serverName);
+                }
 			}
 
 			public Boolean isConnectionSafe()
@@ -765,8 +804,7 @@ namespace ActiveReport
 				}
 				catch (Exception serverNameError)
 				{
-					//AppErrors.Add(new AppError() { Error = new Exception(serverNameError.Message.ToString()), ServerName = _serverName, PrintOnScreen = false });
-					insertAppErrors("Connection", serverNameError.Message.ToString(), 0, (_serverName == String.Empty) ? ConfigurationHandler.getServerNameFromConnectionString(_connectionString) : _serverName, false);
+                    insertAppErrors(String.Empty, serverNameError.Message.ToString(), 0, (_serverName == String.Empty) ? ConfigurationHandler.getServerNameFromConnectionString(_connectionString) : _serverName, false);
 					printToScreen(_serverName, "checkSQLServerConnection", serverNameError.Message.ToString());
 					return false;
 				}
@@ -977,7 +1015,7 @@ RECONFIGURE WITH OVERRIDE;");
 			  HelpText = "Set task scheduler to work once a week.")]
 			public bool taskScheduler { get; set; }
 
-			[Option('f', "ftp", DefaultValue = true,
+			[Option('f', "ftp", DefaultValue = false,
 			  HelpText = "Use ftp to upload the files.")]
 			public bool ftp { get; set; }
 

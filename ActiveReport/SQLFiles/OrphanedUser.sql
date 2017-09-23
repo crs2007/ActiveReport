@@ -38,6 +38,7 @@ SELECT  'Login ' + QUOTENAME(SP.name) + ' Have a user on DB - '
 FROM    sys.server_principals SP
         INNER JOIN #Users U ON U.UserName = SP.name
 WHERE   SP.sid != U.sid
+		AND SP.name != 'public'
 OPTION(RECOMPILE);
 
 DROP TABLE #Users;

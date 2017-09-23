@@ -1,11 +1,15 @@
 ﻿[  
    {
     "XMLOutputPath": "C:\\Output\\",
-    "ClientID": "999",
+    "ClientID": "123",
     "ClientName":"Sharon-PC",
     "MaxSQLQueryTimeout": "3000",
+	"Compress":"NO",
+	"LogFileOut":"NO",
     "FTPUserName": "UserName",
     "FTPPassword": "Password",
-    "FTPPath": "127.0.0.1/ActiveReport"
+    "FTPPath": "127.0.0.1/ActiveReport",
+	"FTPBypassProxyAddress": "proxy1.xxx.il",
+	"FTPBypassProxyPort": "80"
    }
 ]

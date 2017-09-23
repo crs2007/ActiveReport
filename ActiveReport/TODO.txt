@@ -1,2 +1,7 @@
-﻿* Add section that can handle New/Updated SQL files from GitHub. - Only updated for now
+﻿* Add option to add application to Windows scheduled task.- Done
+* Add section that can handle zip files. - Done
+* Add section that can use ftp for transfer the file to the server. - Done
+* Add Event Viewer for XML. - Done
+* Remove from sub root in xml Urgent_Backup => xmlns= - Done
+* Add section that can handle New/Updated SQL files from GitHub. - Only updated for now
 * Suport Linux OS

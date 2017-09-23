@@ -317,14 +317,58 @@ You can copy the file content and paste it in - https://jsonformatter.curiouscon
 		public static void downloadFileFromGitHub()
 		{
 			string destinationPath = AppDomain.CurrentDomain.BaseDirectory + @"SQLFiles\";
-			foreach (var file in Directory.GetFiles(destinationPath, "*.sql"))
-			{
-				downloadFileFromGitHub(file.ToString());
-			}
+			//foreach (var file in Directory.GetFiles(destinationPath, "*.sql"))
+			//{
+			//	downloadFileFromGitHub(file.ToString());
+			//}
 
-		}
 
-		public static void uploadFileWithFTP(IEnumerable<string> files, string userID, string password)
+
+            System.Threading.Tasks.Task.Factory.StartNew(async () =>
+            {
+                var repoOwner = "crs2007";
+                var repoName = "ActiveReport";
+                var path = "ActiveReport/SQLFiles";
+
+                var httpClientResults = await ListContents(repoOwner, repoName, path);
+                foreach (var file in httpClientResults)
+                {
+                    downloadFileFromGitHub(file.ToString(), destinationPath);
+                }
+            }).Wait();
+
+    }
+
+
+        private static HttpClient GetGithubHttpClient()
+        {
+            return new HttpClient
+            {
+                BaseAddress = new Uri("https://api.github.com"),
+                DefaultRequestHeaders =
+            {
+                // NOTE: You'll have to set up Authentication tokens in real use scenario
+                // NOTE: as without it you're subject to harsh rate limits.
+                {"User-Agent", "Github-API-Test"}
+            }
+            };
+        }
+        static async Task<IEnumerable<string>> ListContents(string repoOwner, string repoName, string path)
+        {
+            using (var client = GetGithubHttpClient())
+            {
+                var resp = await client.GetAsync($"repos/{repoOwner}/{repoName}/contents/{path}");
+                var bodyString = await resp.Content.ReadAsStringAsync();
+                var bodyJson = JToken.Parse(bodyString);
+                return bodyJson.SelectTokens("$.[*].name").Select(token => token.Value<string>());
+            }
+        }
+
+
+
+
+
+        public static void uploadFileWithFTP(IEnumerable<string> files, string userID, string password)
 		{
 			foreach (var file in files)
 			{
@@ -336,28 +380,62 @@ You can copy the file content and paste it in - https://jsonformatter.curiouscon
 		public static void uploadFileWithFTP(string localFilePath, string userID, string password)
 		{
 			string FTPurl;
+            bool proxy = false;
+            string proxyAddress = String.Empty;
+            int proxyPort = 80;
+            try
+            {
+                proxyAddress = GetConfigValue("FTPBypassProxyAddress");
+                try
+                {
+                    proxyPort = Int32.Parse(GetConfigValue("FTPBypassProxyPort"));
+                }
+                catch (FormatException)
+                {
+                    proxyPort = 80;
+                }
+                if (proxyAddress.Length > 5)
+                    proxy = true;
+            }
+            catch (Exception ex)
+            {
+                proxy = false;
+            }
 			using (WebClient client = new WebClient())
 			{
 				try
 				{
+
 					FTPurl = String.Concat("ftp://", GetConfigValue("FTPPath"), "/", Path.GetFileName(localFilePath));
 					client.Credentials = new NetworkCredential(userID, password);
-					client.Proxy = new WebProxy(); // initialize this FtpWebRequest property
+                    if (proxy)
+                    {
+                        WebProxy myproxy = new WebProxy(proxyAddress, proxyPort);
+                        myproxy.BypassProxyOnLocal = true;
+                        client.Proxy = myproxy;
+                    }
+                    else
+                    {
+                        client.Proxy = new WebProxy(); // initialize this FtpWebRequest property
+                    }
 					client.UploadFile(FTPurl, "STOR", localFilePath);
 				}
 				catch (Exception ex)
 				{
-					throw new Exception("There is a problem with the network conectivity. Please make sure ftp ports are open ant the ftp server is online", ex);
+                    throw new Exception(@"ftp Error: There is a problem with the network connectivity. 
+Please make sure ftp port(21) are open and the ftp server is online.
+checked http://www.letmegooglethat.com/?q=There+is+a+problem+with+the+network+connectivity.+Please+make+sure+ftp+ports+are+open+ant+the+ftp+server+is+online", ex);
 				}
 			}
 		}
 
-		private async static void downloadFileFromGitHub(string FileName)
+		private async static void downloadFileFromGitHub(string FileName, string destinationPath)
 		{
 
 			string sourceURL = String.Concat(GitHuburl, @"crs2007/ActiveReport/master/ActiveReport/SQLFiles/", Path.GetFileName(FileName));
-			string destinationPath = FileName;
-			long fileSize = 0;
+            destinationPath = destinationPath + Path.GetFileName(FileName);
+
+            long fileSize = 0;
 			int bufferSize = 1024;
 			bufferSize *= 1000;
 			long existLen = 0;
@@ -376,8 +454,8 @@ You can copy the file content and paste it in - https://jsonformatter.curiouscon
 			}
 			else
 			{
-				//TODO - Add new SQL file.
-			}
+                File.WriteAllText(destinationPath, fileContent);
+            }
 		}
 
 		#endregion
@@ -508,7 +586,34 @@ SELECT @IsLinux";
 			string[] selectedProperties = new string[] { "Message", "EventCode", "SourceName", "Type", "TimeGenerated" };
 			SelectQuery query = new SelectQuery("Win32_NTLogEvent", condition, selectedProperties);
 
-			MgtScope.Connect();
+			
+            try
+            {
+                MgtScope.Connect();
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = String.Empty;
+
+                if (ex.Message.Contains("0x80070005"))
+                {
+                    errorMsg = String.Concat("The user does not have remote access to the computer through DCOM. Typically, DCOM errors occur when connecting to a remote computer with a different operating system version.", Environment.NewLine,
+                    "Give the user Remote Launch and Remote Activation permissions in dcomcnfg. Right-click My Computer-> Properties Under COM Security, click 'Edit Limits' for both sections. Give the user you want remote access, remote launch, and remote activation. Then go to DCOM Config, find 'Windows Management Instrumentation', and give the user you want Remote Launch and Remote Activation.");
+                }
+                else if (ex.Message.Contains("0x800706BA"))
+                {
+                    errorMsg = "The computer really doesn't exist.|The Windows Firewall is blocking the connection.";
+                }
+                else if (ex.Message.Contains("0x80041003"))
+                {
+                    errorMsg = String.Concat("The user does not have permission to perform the operation in WMI. This could happen when you query certain classes as a low-rights user, but most often happens when you attempt to invoke methods or change WMI instances as a low rights user. The namespace you are connecting to is encrypted, and the user is attempting to connect with an unencrypted connection", Environment.NewLine,
+                    "Give the user access with the WMI Control (make sure they have Remote_Access set to true) Connect using a client that supports encryption.");
+                }
+                else
+                { errorMsg = ex.Message; }
+                
+                throw new Exception(errorMsg);
+            }
 			if (MgtScope.IsConnected)
 			{
 
@@ -1192,7 +1297,40 @@ OPTION(RECOMPILE);");
 
 			ManagementScope MgtScope = new ManagementScope(@"\\" + RemoteMachine + @"\root\cimv2", ConOptions);
 
-			MgtScope.Connect();
+            try
+            {
+                MgtScope.Connect();
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = String.Empty;
+
+                if (ex.Message.Contains("0x80070005"))
+                {
+                    errorMsg = String.Concat("The user does not have remote access to the computer through DCOM. Typically, DCOM errors occur when connecting to a remote computer with a different operating system version.",Environment.NewLine,
+                    "Give the user Remote Launch and Remote Activation permissions in dcomcnfg. Right-click My Computer-> Properties Under COM Security, click 'Edit Limits' for both sections. Give the user you want remote access, remote launch, and remote activation. Then go to DCOM Config, find 'Windows Management Instrumentation', and give the user you want Remote Launch and Remote Activation."); 
+                }
+                else if (ex.Message.Contains("0x800706BA"))
+                {
+                    errorMsg = "The computer really doesn't exist.|The Windows Firewall is blocking the connection."; 
+                }
+                else if (ex.Message.Contains("0x80041003"))
+                {
+                    errorMsg = String.Concat("The user does not have permission to perform the operation in WMI. This could happen when you query certain classes as a low-rights user, but most often happens when you attempt to invoke methods or change WMI instances as a low rights user. The namespace you are connecting to is encrypted, and the user is attempting to connect with an unencrypted connection", Environment.NewLine,
+                    "Give the user access with the WMI Control (make sure they have Remote_Access set to true) Connect using a client that supports encryption."); 
+                }
+                else
+                { errorMsg = ex.Message; }
+                return new XElement(Name,
+                from VolumeInfo in Vi
+                select new XElement(Name + "_Data",
+                             new XElement("Drive", VolumeInfo.Drive),
+                             new XElement("Total_Size", VolumeInfo.Total_Size),
+                             new XElement("Free_Space", VolumeInfo.Free_Space),
+                             new XElement("Label", VolumeInfo.Label)
+                           ));
+            }
+			
 			if (!MgtScope.IsConnected)
 			{
 				return new XElement(Name,
