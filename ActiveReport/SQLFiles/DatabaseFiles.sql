@@ -26,7 +26,7 @@ OPTION(RECOMPILE);'
 --Run the command against each database (IGNORE OFF-LINE DB)
 EXEC sp_MSforeachdb @SQL;
 
-SELECT	D.name [Database_Name],mf.name [File_Name],MF.physical_name [Physical_Name],
+SELECT	D.name [Database_Name],MF.name [File_Name],MF.physical_name [Physical_Name],
 		CASE MF.type_desc 
 		WHEN 'ROWS' THEN 'Data'
 		WHEN 'LOG' THEN 'Log'
