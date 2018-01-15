@@ -7,14 +7,14 @@ This tool help to get SQL Server metadata info into single XML file per server.
 ## Problems and Solutions
 
 ### SQL Files:
-* Etch user can add T-SQL script as match as he like to the SQL Script Path.
+* Each user can add T-SQL script as match as he likes to the SQL Script Path.
 * The application knows automatically to build the XML elements.
-* The script need to run(without any errors) on SQL Server 2005+(Linux or Windows).
-* If the script output have Multiple Active Result Sets([MARS](https://docs.microsoft.com/en-us/sql/relational-databases/native-client/features/using-multiple-active-result-sets-mars)). The last result set will be taken to the XML.
+* The script needs to run(without any errors) on SQL Server 2005+(Linux or Windows).
+* If the script output has Multiple Active Result Sets([MARS](https://docs.microsoft.com/en-us/sql/relational-databases/native-client/features/using-multiple-active-result-sets-mars)). The last result set will be taken to the XML.
 * If one or more columns from the result sets have no name(title) It will generate one for you.
 * You can rest assure that you do not need to activate [xp_cmdshell](https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/xp-cmdshell-transact-sql) (Windows OS only) per single script.
 * If you intend to write your own script please look at the script structure in the folder and try that they will look alike.
-* On etch script the application adds a prefix - 
+* On each script the application adds a prefix - 
 ```sql
 SET NOCOUNT ON;
 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
@@ -24,7 +24,7 @@ SET DEADLOCK_PRIORITY LOW;
 ```
 
 ### Performance:
-* By default the etch SQL script run simultaneously on etch server(Multi Thread).
+* By default the each SQL script run simultaneously on each server(Multi Thread).
 * By default the process run simultaneously(Multi Thread) on all server that in the list.
 
 ### Parameters
@@ -41,7 +41,7 @@ ActiveReport.exe -d "true" -m "true"
 ```
 ### Prerequisite:
 * .NET 4.5.2([Web Installer](https://www.microsoft.com/en-us/download/details.aspx?id=42643)|[Offline Installer](https://www.microsoft.com/en-us/download/details.aspx?id=42642))
-* Local administrator on etch SQL Server that you monitor. That because "[Access is denied](https://social.msdn.microsoft.com/Forums/vstudio/en-US/6229334e-d5ef-4016-9e7e-1c8718be8d43/access-is-denied-exception-from-hresult-0x80070005-eaccessdenied-in-vbnet?forum=netfxbcl&prof=required)" error when try OS methuds.
+* Local administrator on each SQL Server that you monitor. That because "[Access is denied](https://social.msdn.microsoft.com/Forums/vstudio/en-US/6229334e-d5ef-4016-9e7e-1c8718be8d43/access-is-denied-exception-from-hresult-0x80070005-eaccessdenied-in-vbnet?forum=netfxbcl&prof=required)" error when try OS methuds.
 
 ### To Do:
 * Add full support for Linux OS.
